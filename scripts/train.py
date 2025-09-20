@@ -128,6 +128,7 @@ if __name__ == "__main__":
                 base_dir,
                 save_dir,
                 config_copy.base_tmi_port + process_number,
+                process_number,
             ),
         )
         for rollout_queue, process_number in zip(rollout_queues, range(config_copy.gpu_collectors_count))

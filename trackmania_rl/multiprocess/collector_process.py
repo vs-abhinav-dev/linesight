@@ -26,6 +26,7 @@ def collector_process_fn(
     base_dir: Path,
     save_dir: Path,
     tmi_port: int,
+    process_number: int,
 ):
     from trackmania_rl.map_loader import analyze_map_cycle, load_next_map_zone_centers
     from trackmania_rl.tmi_interaction import game_instance_manager
