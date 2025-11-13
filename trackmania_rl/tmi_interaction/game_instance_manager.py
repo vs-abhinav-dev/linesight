@@ -33,6 +33,7 @@ import numba
 import numpy as np
 import numpy.typing as npt
 import psutil
+import subprocess
 
 from config_files import config_copy, user_config
 from trackmania_rl import contact_materials, map_loader
@@ -64,7 +65,8 @@ def ensure_not_minimized(trackmania_window):
         if win32gui.IsIconic(
             trackmania_window
         ):  # https://stackoverflow.com/questions/54560987/restore-window-without-setting-to-foreground
-            win32gui.ShowWindow(trackmania_window, win32con.SW_SHOWNORMAL)  # Unminimize window
+            # Unminimize window
+            win32gui.ShowWindow(trackmania_window, win32con.SW_SHOWNORMAL)
 
 
 @numba.njit
@@ -76,26 +78,33 @@ def update_current_zone_idx(
     next_real_checkpoint_positions: npt.NDArray,
     max_allowable_distance_to_real_checkpoint: npt.NDArray,
 ):
-    d1 = np.linalg.norm(zone_centers[current_zone_idx + 1] - sim_state_position)
+    d1 = np.linalg.norm(
+        zone_centers[current_zone_idx + 1] - sim_state_position)
     d2 = np.linalg.norm(zone_centers[current_zone_idx] - sim_state_position)
-    d3 = np.linalg.norm(zone_centers[current_zone_idx - 1] - sim_state_position)
-    d4 = np.linalg.norm(next_real_checkpoint_positions[current_zone_idx] - sim_state_position)
+    d3 = np.linalg.norm(
+        zone_centers[current_zone_idx - 1] - sim_state_position)
+    d4 = np.linalg.norm(
+        next_real_checkpoint_positions[current_zone_idx] - sim_state_position)
     while (
         d1 <= d2
         and d1 <= max_allowable_distance_to_virtual_checkpoint
         and current_zone_idx
-        < len(zone_centers) - 1 - config_copy.n_zone_centers_extrapolate_after_end_of_map  # We can never enter the final virtual zone
+        # We can never enter the final virtual zone
+        < len(zone_centers) - 1 - config_copy.n_zone_centers_extrapolate_after_end_of_map
         and d4 < max_allowable_distance_to_real_checkpoint[current_zone_idx]
     ):
         # Move from one virtual zone to another
         current_zone_idx += 1
         d2, d3 = d1, d2
-        d1 = np.linalg.norm(zone_centers[current_zone_idx + 1] - sim_state_position)
-        d4 = np.linalg.norm(next_real_checkpoint_positions[current_zone_idx] - sim_state_position)
+        d1 = np.linalg.norm(
+            zone_centers[current_zone_idx + 1] - sim_state_position)
+        d4 = np.linalg.norm(
+            next_real_checkpoint_positions[current_zone_idx] - sim_state_position)
     while current_zone_idx >= 2 and d3 < d2 and d3 <= max_allowable_distance_to_virtual_checkpoint:
         current_zone_idx -= 1
         d1, d2 = d2, d3
-        d3 = np.linalg.norm(zone_centers[current_zone_idx - 1] - sim_state_position)
+        d3 = np.linalg.norm(
+            zone_centers[current_zone_idx - 1] - sim_state_position)
     return current_zone_idx
 
 
@@ -134,26 +143,23 @@ class GameInstanceManager:
 
         if config_copy.is_linux:
             self.tm_window_id = None
-            while self.tm_window_id is None:  # This outer while is for the edge case where the window may not have had time to be launched
-                window_search_depth = 1
-                while True:  # This inner while is to try and find the right depth of the window in Xdo().search_windows()
-                    c1 = set(Xdo().search_windows(winname=b"TrackMania Modded", max_depth=window_search_depth + 1))
-                    c2 = set(Xdo().search_windows(winname=b"TrackMania Modded", max_depth=window_search_depth))
-                    c1 = {w_id for w_id in c1 if Xdo().get_pid_window(w_id) == self.tm_process_id}
-                    c2 = {w_id for w_id in c2 if Xdo().get_pid_window(w_id) == self.tm_process_id}
-                    c1_diff_c2 = c1.difference(c2)
-                    if len(c1_diff_c2) == 1:
-                        self.tm_window_id = c1_diff_c2.pop()
+            while self.tm_window_id is None:
+                windows_ids = subprocess.run(
+                    ['xdotool', 'search', '--name', "TrackMania Modded"],
+                    capture_output=True, text=True, check=True
+                )
+                windows_ids = windows_ids.stdout.splitlines()
+
+                for window_id in windows_ids:
+                    window_pid = subprocess.run(
+                        ['xdotool', 'getwindowpid', window_id],
+                        capture_output=True, text=True, check=True
+                    )
+                    window_pid = int(window_pid.stdout.strip())
+
+                    if window_pid == self.tm_process_id:
+                        self.tm_window_id = int(window_id)
                         break
-                    elif (
-                        len(c1_diff_c2) == 0 and len(c1) > 0
-                    ) or window_search_depth >= 10:  # 10 is an arbitrary cutoff in this search we do not fully understand
-                        print(
-                            "Warning: Worker could not find the window of the game it just launched, stopped at window_search_depth",
-                            window_search_depth,
-                        )
-                        break
-                    window_search_depth += 1
         else:
 
             def get_hwnds_for_pid(pid):
@@ -191,7 +197,8 @@ class GameInstanceManager:
         if config_copy.is_linux:
             self.game_spawning_lock.acquire()
             pid_before = self.get_tm_pids()
-            os.system(str(user_config.linux_launch_game_path) + " " + str(self.tmi_port))
+            os.system(str(user_config.linux_launch_game_path) +
+                      " " + str(self.tmi_port))
             while True:
                 pid_after = self.get_tm_pids()
                 tmi_pid_candidates = set(pid_after) - set(pid_before)
@@ -208,12 +215,14 @@ class GameInstanceManager:
                 ' echo exit $process.id}"'
             )
 
-            tmi_process_id = int(subprocess.check_output(launch_string).decode().split("\r\n")[1])
+            tmi_process_id = int(subprocess.check_output(
+                launch_string).decode().split("\r\n")[1])
             while self.tm_process_id is None:
                 tm_processes = list(
                     filter(
                         lambda s: s.startswith("TmForever"),
-                        subprocess.check_output("wmic process get Caption,ParentProcessId,ProcessId").decode().split("\r\n"),
+                        subprocess.check_output(
+                            "wmic process get Caption,ParentProcessId,ProcessId").decode().split("\r\n"),
                     )
                 )
                 for process in tm_processes:
@@ -332,14 +341,16 @@ class GameInstanceManager:
                 except ConnectionRefusedError as e:
                     current_time = time.perf_counter()
                     if current_time - last_connection_error_message_time > 1:
-                        print(f"Connection to TMInterface unsuccessful for {current_time - connection_attempts_start_time:.1f}s")
+                        print(
+                            f"Connection to TMInterface unsuccessful for {current_time - connection_attempts_start_time:.1f}s")
                         last_connection_error_message_time = current_time
         else:
             assert self.msgtype_response_to_wakeup_TMI is not None or self.last_rollout_crashed
 
             self.request_speed(self.running_speed)
             if self.msgtype_response_to_wakeup_TMI is not None:
-                self.iface._respond_to_call(self.msgtype_response_to_wakeup_TMI)
+                self.iface._respond_to_call(
+                    self.msgtype_response_to_wakeup_TMI)
                 self.msgtype_response_to_wakeup_TMI = None
 
         self.last_rollout_crashed = False
@@ -373,7 +384,8 @@ class GameInstanceManager:
                     sim_state_mobil = last_known_simulation_state.scene_mobil
                     sim_state_mobil_engine = sim_state_mobil.engine
                     simulation_wheels = last_known_simulation_state.simulation_wheels
-                    wheel_state = [simulation_wheels[i].real_time_state for i in range(4)]
+                    wheel_state = [
+                        simulation_wheels[i].real_time_state for i in range(4)]
                     sim_state_position = np.array(
                         sim_state_dyna_current.position,
                         dtype=np.float32,
@@ -391,19 +403,22 @@ class GameInstanceManager:
                     gearbox_state = sim_state_mobil.gearbox_state
                     counter_gearbox_state = 0
                     if gearbox_state != 0 and len(rollout_results["car_gear_and_wheels"]) > 0:
-                        counter_gearbox_state = 1 + rollout_results["car_gear_and_wheels"][-1][15]
+                        counter_gearbox_state = 1 + \
+                            rollout_results["car_gear_and_wheels"][-1][15]
 
                     sim_state_car_gear_and_wheels = np.array(
                         [
                             *(ws.is_sliding for ws in wheel_state),  # Bool
                             *(ws.has_ground_contact for ws in wheel_state),  # Bool
-                            *(ws.damper_absorb for ws in wheel_state),  # 0.005 min, 0.15 max, 0.01 typically
+                            # 0.005 min, 0.15 max, 0.01 typically
+                            *(ws.damper_absorb for ws in wheel_state),
                             gearbox_state,  # Bool, except 2 at startup
                             sim_state_mobil_engine.gear,  # 0 -> 5 approx
                             sim_state_mobil_engine.actual_rpm,  # 0-10000 approx
                             counter_gearbox_state,  # Up to typically 28 when changing gears
                             *(
-                                i == contact_materials.physics_behavior_fromint[ws.contact_material_id & 0xFFFF]
+                                i == contact_materials.physics_behavior_fromint[
+                                    ws.contact_material_id & 0xFFFF]
                                 for ws in wheel_state
                                 for i in range(config_copy.n_contact_material_physics_behavior_types)
                             ),
@@ -424,7 +439,8 @@ class GameInstanceManager:
                         last_progress_improvement_ms = sim_state_race_time
                         rollout_results["furthest_zone_idx"] = current_zone_idx
 
-                    rollout_results["current_zone_idx"].append(current_zone_idx)
+                    rollout_results["current_zone_idx"].append(
+                        current_zone_idx)
 
                     meters_in_current_zone = np.clip(
                         (sim_state_position - zone_transitions[current_zone_idx - 1]).dot(
@@ -435,29 +451,35 @@ class GameInstanceManager:
                     )
 
                     distance_since_track_begin = (
-                        distance_from_start_track_to_prev_zone_transition[current_zone_idx - 1] + meters_in_current_zone
+                        distance_from_start_track_to_prev_zone_transition[
+                            current_zone_idx - 1] + meters_in_current_zone
                     )
 
                     # ==== Construct features
                     state_zone_center_coordinates_in_car_reference_system = sim_state_orientation.dot(
                         (
                             zone_centers[
-                                current_zone_idx : current_zone_idx
+                                current_zone_idx: current_zone_idx
                                 + config_copy.one_every_n_zone_centers_in_inputs
-                                * config_copy.n_zone_centers_in_inputs : config_copy.one_every_n_zone_centers_in_inputs,
+                                * config_copy.n_zone_centers_in_inputs: config_copy.one_every_n_zone_centers_in_inputs,
                                 :,
                             ]
                             - sim_state_position
                         ).T
                     ).T  # (n_zone_centers_in_inputs, 3)
-                    state_y_map_vector_in_car_reference_system = sim_state_orientation.dot(np.array([0, 1, 0]))
-                    state_car_velocity_in_car_reference_system = sim_state_orientation.dot(sim_state_velocity)
-                    state_car_angular_velocity_in_car_reference_system = sim_state_orientation.dot(sim_state_angular_speed)
+                    state_y_map_vector_in_car_reference_system = sim_state_orientation.dot(
+                        np.array([0, 1, 0]))
+                    state_car_velocity_in_car_reference_system = sim_state_orientation.dot(
+                        sim_state_velocity)
+                    state_car_angular_velocity_in_car_reference_system = sim_state_orientation.dot(
+                        sim_state_angular_speed)
 
                     previous_actions = [
-                        config_copy.inputs[rollout_results["actions"][k] if k >= 0 else config_copy.action_forward_idx]
+                        config_copy.inputs[rollout_results["actions"][k]
+                                           if k >= 0 else config_copy.action_forward_idx]
                         for k in range(
-                            len(rollout_results["actions"]) - config_copy.n_prev_actions_in_inputs, len(rollout_results["actions"])
+                            len(rollout_results["actions"]) - config_copy.n_prev_actions_in_inputs, len(
+                                rollout_results["actions"])
                         )
                     ]
 
@@ -479,7 +501,8 @@ class GameInstanceManager:
                             min(
                                 config_copy.margin_to_announce_finish_meters,
                                 distance_from_start_track_to_prev_zone_transition[
-                                    len(zone_centers) - config_copy.n_zone_centers_extrapolate_after_end_of_map
+                                    len(zone_centers) -
+                                    config_copy.n_zone_centers_extrapolate_after_end_of_map
                                 ]
                                 - distance_since_track_begin,
                             ),
@@ -510,8 +533,10 @@ class GameInstanceManager:
                     # ============================
 
                     if not self.timeout_has_been_set:
-                        self.iface.set_timeout(config_copy.timeout_during_run_ms)
-                        self.iface.execute_command(f"cam {config_copy.game_camera_number}")
+                        self.iface.set_timeout(
+                            config_copy.timeout_during_run_ms)
+                        self.iface.execute_command(
+                            f"cam {config_copy.game_camera_number}")
                         self.timeout_has_been_set = True
 
                     if not self.UI_disabled and _time < map_change_requested_time:
@@ -519,7 +544,8 @@ class GameInstanceManager:
                         self.UI_disabled = True
 
                     if _time == 0 and (map_path not in self.start_states):
-                        self.start_states[map_path] = self.iface.get_simulation_state()
+                        self.start_states[map_path] = self.iface.get_simulation_state(
+                        )
 
                     if (not give_up_signal_has_been_sent) and (map_path != self.latest_map_path_requested):
                         self.request_map(map_path, zone_centers)
@@ -535,13 +561,15 @@ class GameInstanceManager:
                         give_up_signal_has_been_sent = True
                         this_rollout_has_seen_t_negative = True
                     elif (
-                        (_time > self.max_overall_duration_ms or _time > last_progress_improvement_ms + self.max_minirace_duration_ms)
+                        (_time > self.max_overall_duration_ms or _time >
+                         last_progress_improvement_ms + self.max_minirace_duration_ms)
                         and this_rollout_has_seen_t_negative
                         and not this_rollout_is_finished
                     ):
                         # FAILED TO FINISH IN TIME
                         simulation_state = self.iface.get_simulation_state()
-                        race_time = max([simulation_state.race_time, 1e-12])  # Epsilon trick to avoid division by zero
+                        # Epsilon trick to avoid division by zero
+                        race_time = max([simulation_state.race_time, 1e-12])
 
                         end_race_stats["race_finished"] = False
                         end_race_stats["race_time"] = config_copy.cutoff_rollout_if_race_not_finished_within_duration_ms
@@ -561,7 +589,8 @@ class GameInstanceManager:
                         self.iface.rewind_to_current_state()
 
                         self.msgtype_response_to_wakeup_TMI = msgtype
-                        self.iface.set_timeout(config_copy.timeout_between_runs_ms)
+                        self.iface.set_timeout(
+                            config_copy.timeout_between_runs_ms)
                         if frame_expected:
                             self.iface.unrequest_frame()
                             frame_expected = False
@@ -578,7 +607,8 @@ class GameInstanceManager:
                             if compute_action_asap:
                                 compute_action_asap_floats = True
                                 frame_expected = True
-                                self.iface.request_frame(config_copy.W_downsized, config_copy.H_downsized)
+                                self.iface.request_frame(
+                                    config_copy.W_downsized, config_copy.H_downsized)
 
                             if _time % (10 * self.run_steps_per_action * config_copy.update_inference_network_every_n_actions) == 0:
                                 update_network()
@@ -601,7 +631,8 @@ class GameInstanceManager:
                     target = self.iface._read_int32()
 
                     simulation_state = self.iface.get_simulation_state()
-                    end_race_stats["cp_time_ms"].append(simulation_state.race_time)
+                    end_race_stats["cp_time_ms"].append(
+                        simulation_state.race_time)
                     # ============================
                     # BEGIN ON CP COUNT
                     # ============================
@@ -611,7 +642,8 @@ class GameInstanceManager:
                         while len(simulation_state.cp_data.cp_times) == 0 and cp_times_bug_handling_attempts < 5:
                             cp_times_bug_handling_attempts += 1
                         if len(simulation_state.cp_data.cp_times) != 0:
-                            simulation_state.cp_data.cp_times[-1].time = -1  # Equivalent to prevent_simulation_finish()
+                            # Equivalent to prevent_simulation_finish()
+                            simulation_state.cp_data.cp_times[-1].time = -1
                             self.iface.rewind_to_state(simulation_state)
                         else:
                             self.iface.prevent_simulation_finish()
@@ -620,7 +652,8 @@ class GameInstanceManager:
                             this_rollout_has_seen_t_negative and not this_rollout_is_finished
                         ):  # We shouldn't take into account a race finished after we ended the rollout
                             if (
-                                len(rollout_results["current_zone_idx"]) == len(rollout_results["frames"]) + 1
+                                len(rollout_results["current_zone_idx"]) == len(
+                                    rollout_results["frames"]) + 1
                             ):  # Handle the case where the floats have been computed but the race ended so we don't actually compute an action
                                 rollout_results["current_zone_idx"].pop(-1)
 
@@ -637,11 +670,13 @@ class GameInstanceManager:
                             end_race_stats["instrumentation__between_run_steps"] = (
                                 instrumentation__between_run_steps / simulation_state.race_time * 50
                             )
-                            end_race_stats["instrumentation__grab_frame"] = instrumentation__grab_frame / simulation_state.race_time * 50
+                            end_race_stats["instrumentation__grab_frame"] = instrumentation__grab_frame / \
+                                simulation_state.race_time * 50
                             end_race_stats["instrumentation__convert_frame"] = (
                                 instrumentation__convert_frame / simulation_state.race_time * 50
                             )
-                            end_race_stats["instrumentation__grab_floats"] = instrumentation__grab_floats / simulation_state.race_time * 50
+                            end_race_stats["instrumentation__grab_floats"] = instrumentation__grab_floats / \
+                                simulation_state.race_time * 50
                             end_race_stats["instrumentation__exploration_policy"] = (
                                 instrumentation__exploration_policy / simulation_state.race_time * 50
                             )
@@ -652,22 +687,26 @@ class GameInstanceManager:
 
                             this_rollout_is_finished = True  # SUCCESSFULLY FINISHED THE RACE
                             self.msgtype_response_to_wakeup_TMI = msgtype
-                            self.iface.set_timeout(config_copy.timeout_between_runs_ms)
+                            self.iface.set_timeout(
+                                config_copy.timeout_between_runs_ms)
                             if frame_expected:
                                 self.iface.unrequest_frame()
                                 frame_expected = False
 
                             rollout_results["current_zone_idx"].append(
-                                len(zone_centers) - config_copy.n_zone_centers_extrapolate_after_end_of_map
+                                len(zone_centers) -
+                                config_copy.n_zone_centers_extrapolate_after_end_of_map
                             )
                             rollout_results["frames"].append(np.nan)
                             rollout_results["input_w"].append(np.nan)
                             rollout_results["actions"].append(np.nan)
                             rollout_results["action_was_greedy"].append(np.nan)
-                            rollout_results["car_gear_and_wheels"].append(np.nan)
+                            rollout_results["car_gear_and_wheels"].append(
+                                np.nan)
                             rollout_results["meters_advanced_along_centerline"].append(
                                 distance_from_start_track_to_prev_zone_transition[
-                                    len(zone_centers) - config_copy.n_zone_centers_extrapolate_after_end_of_map
+                                    len(zone_centers) -
+                                    config_copy.n_zone_centers_extrapolate_after_end_of_map
                                 ]
                             )
 
@@ -693,7 +732,8 @@ class GameInstanceManager:
                         instrumentation__grab_frame += pc6 - pc5
                         assert self.latest_tm_engine_speed_requested == 0
                         assert not compute_action_asap_floats
-                        frame = np.expand_dims(cv2.cvtColor(frame, cv2.COLOR_BGRA2GRAY), 0)
+                        frame = np.expand_dims(cv2.cvtColor(
+                            frame, cv2.COLOR_BGRA2GRAY), 0)
                         # frame is a numpy array of shape (1, H, W) and dtype np.uint8
                         rollout_results["frames"].append(frame)
                         pc7 = time.perf_counter_ns()
@@ -716,11 +756,15 @@ class GameInstanceManager:
                             end_race_stats["value_starting_frame"] = q_value
                             for i, val in enumerate(np.nditer(q_values)):
                                 end_race_stats[f"q_value_{i}_starting_frame"] = val
-                        rollout_results["meters_advanced_along_centerline"].append(distance_since_track_begin)
-                        rollout_results["input_w"].append(config_copy.inputs[action_idx]["accelerate"])
+                        rollout_results["meters_advanced_along_centerline"].append(
+                            distance_since_track_begin)
+                        rollout_results["input_w"].append(
+                            config_copy.inputs[action_idx]["accelerate"])
                         rollout_results["actions"].append(action_idx)
-                        rollout_results["action_was_greedy"].append(action_was_greedy)
-                        rollout_results["car_gear_and_wheels"].append(sim_state_car_gear_and_wheels)
+                        rollout_results["action_was_greedy"].append(
+                            action_was_greedy)
+                        rollout_results["car_gear_and_wheels"].append(
+                            sim_state_car_gear_and_wheels)
                         rollout_results["q_values"].append(q_values)
                         rollout_results["state_float"].append(floats)
 
@@ -743,12 +787,17 @@ class GameInstanceManager:
                     if self.latest_map_path_requested == -1:  # Game was relaunched and must have console open
                         self.iface.execute_command("toggle_console")
                     self.request_speed(1)
-                    self.iface.set_on_step_period(self.run_steps_per_action * 10)
-                    self.iface.execute_command(f"set countdown_speed {self.running_speed}")
-                    self.iface.execute_command(f"set autologin {config_copy.username}")
+                    self.iface.set_on_step_period(
+                        self.run_steps_per_action * 10)
+                    self.iface.execute_command(
+                        f"set countdown_speed {self.running_speed}")
+                    self.iface.execute_command(
+                        f"set autologin {config_copy.username}")
                     self.iface.execute_command("set unfocused_fps_limit false")
-                    self.iface.execute_command("set skip_map_load_screens true")
-                    self.iface.execute_command("set disable_forced_camera true")
+                    self.iface.execute_command(
+                        "set skip_map_load_screens true")
+                    self.iface.execute_command(
+                        "set disable_forced_camera true")
                     self.iface.execute_command("set autorewind false")
                     self.iface.execute_command("set auto_reload_plugins false")
                     if self.iface.is_in_menus() and map_path != self.latest_map_path_requested:
