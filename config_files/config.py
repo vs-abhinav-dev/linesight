@@ -28,7 +28,6 @@ from config_files.user_config import *
 W_downsized = 160
 H_downsized = 120
 
-run_name = "run_name_to_be_changed"
 running_speed = 80
 
 tm_engine_step_per_action = 5
@@ -51,7 +50,7 @@ min_horizon_to_update_priority_actions = temporal_mini_race_duration_actions - 4
 # If mini_race_time == mini_race_duration this is the end of the minirace
 margin_to_announce_finish_meters = 700
 
-global_schedule_speed = 1
+global_schedule_speed = 0.8
 
 epsilon_schedule = [
     (0, 1),
@@ -84,7 +83,8 @@ n_steps = 3
 constant_reward_per_ms = -6 / 5000
 reward_per_m_advanced_along_centerline = 5 / 500
 
-float_input_dim = 27 + 3 * n_zone_centers_in_inputs + 4 * n_prev_actions_in_inputs + 4 * n_contact_material_physics_behavior_types + 1
+float_input_dim = 27 + 3 * n_zone_centers_in_inputs + 4 * \
+    n_prev_actions_in_inputs + 4 * n_contact_material_physics_behavior_types + 1
 float_hidden_dim = 256
 conv_head_output_dim = 5632
 dense_hidden_dimension = 1024
@@ -94,7 +94,8 @@ iqn_k = 32  # must be an even number because we sample tau symmetrically around 
 iqn_kappa = 5e-3
 use_ddqn = False
 
-prio_alpha = np.float32(0)  # Rainbow-IQN paper: 0.2, Rainbow paper: 0.5, PER paper 0.6
+# Rainbow-IQN paper: 0.2, Rainbow paper: 0.5, PER paper 0.6
+prio_alpha = np.float32(0)
 prio_epsilon = np.float32(2e-3)  # Defaults to 10^-6 in stable-baselines
 prio_beta = np.float32(1)
 
@@ -145,8 +146,9 @@ number_memories_trained_on_between_target_network_updates = 2048
 soft_update_tau = 0.02
 
 distance_between_checkpoints = 0.5
-road_width = 90  ## a little bit of margin, could be closer to 24 probably ? Don't take risks there are curvy roads
-max_allowable_distance_to_virtual_checkpoint = np.sqrt((distance_between_checkpoints / 2) ** 2 + (road_width / 2) ** 2)
+road_width = 90  # a little bit of margin, could be closer to 24 probably ? Don't take risks there are curvy roads
+max_allowable_distance_to_virtual_checkpoint = np.sqrt(
+    (distance_between_checkpoints / 2) ** 2 + (road_width / 2) ** 2)
 
 timeout_during_run_ms = 10_100
 timeout_between_runs_ms = 600_000_000
@@ -168,7 +170,7 @@ use_jit = True
 # gpu_collectors_count is the number of Trackmania instances that will be launched in parallel.
 # It is recommended that users adjust this number depending on the performance of their machine.
 # We recommend trying different values and finding the one that maximises the number of batches done per unit of time.
-gpu_collectors_count = 2
+gpu_collectors_count = 4
 
 send_shared_network_every_n_batches = 10
 update_inference_network_every_n_actions = 20
@@ -176,7 +178,8 @@ update_inference_network_every_n_actions = 20
 target_self_loss_clamp_ratio = 4
 
 final_speed_reward_as_if_duration_s = 0
-final_speed_reward_per_m_per_s = reward_per_m_advanced_along_centerline * final_speed_reward_as_if_duration_s
+final_speed_reward_per_m_per_s = reward_per_m_advanced_along_centerline * \
+    final_speed_reward_as_if_duration_s
 
 shaped_reward_dist_to_cur_vcp = -0.1
 shaped_reward_min_dist_to_cur_vcp = 2
@@ -192,18 +195,18 @@ game_camera_number = 2
 
 sync_virtual_and_real_checkpoints = True
 
-""" 
+"""
 ============================================      MAP CYCLE     =======================================================
 
 In this section we define the map cycle.
 
 It is a list of iterators, each iterator must return tuples with the following information:
     - short map name        (string):     for logging purposes
-    - map path              (string):     to automatically load the map in game. 
+    - map path              (string):     to automatically load the map in game.
                                           This is the same map name as the "map" command in the TMInterface console.
     - reference line path   (string):     where to find the reference line for this map
     - is_explo              (boolean):    whether the policy when running on this map should be exploratory
-    - fill_buffer           (boolean):    whether the memories generated during this run should be placed in the buffer 
+    - fill_buffer           (boolean):    whether the memories generated during this run should be placed in the buffer
 
 The map cycle may seem complex at first glance, but it provides a large amount of flexibility:
     - can train on some maps, test blindly on others
@@ -211,7 +214,7 @@ The map cycle may seem complex at first glance, but it provides a large amount o
     - can define multiple reference lines for a given map
     - etc...
 
-The example below defines a simple cycle where the agent alternates between four exploratory runs on map5, and one 
+The example below defines a simple cycle where the agent alternates between four exploratory runs on map5, and one
 evaluation run on the same map.
 
 map_cycle = [
@@ -283,8 +286,8 @@ map_cycle += [
     # repeat(("B03", '"Official Maps\Green\B03-Race.Challenge.Gbx"', "B03-Race_10m_cl.npy", False, True), 1),
     # repeat(("B05", '"Official Maps\Green\B05-Race.Challenge.Gbx"', "B05-Race_10m_cl.npy", True, True), 4),
     # repeat(("B05", '"Official Maps\Green\B05-Race.Challenge.Gbx"', "B05-Race_10m_cl.npy", False, True), 1),
-    repeat(("hock", "ESL-Hockolicious.Challenge.Gbx", "ESL-Hockolicious_0.5m_cl2.npy", True, True), 4),
-    repeat(("hock", "ESL-Hockolicious.Challenge.Gbx", "ESL-Hockolicious_0.5m_cl2.npy", False, True), 1),
+    # repeat(("hock", "ESL-Hockolicious.Challenge.Gbx", "ESL-Hockolicious_0.5m_cl2.npy", True, True), 4),
+    # repeat(("hock", "ESL-Hockolicious.Challenge.Gbx", "ESL-Hockolicious_0.5m_cl2.npy", False, True), 1),
     # repeat(("A02", f'"Official Maps\A02-Race.Challenge.Gbx"', "A02-Race_0.5m_cl2.npy", False, False), 1),
     # repeat(("yellowmile", f'"The Yellow Mile_.Challenge.Gbx"', "YellowMile_0.5m_cl.npy", False, False), 1),
     # repeat(("te86", f'"te 86.Challenge.Gbx"', "te86_0.5m_cl.npy", False, False), 1),
@@ -292,8 +295,10 @@ map_cycle += [
     # repeat(("map3", '"My Challenges\Map3_nowalls.Challenge.Gbx"', "map3_0.5m_cl.npy", False, False), 1),
     # repeat(("wallb1", "Wallbang_full.Challenge.Gbx", "Wallbang_full_0.5m_cl.npy", False, False), 1),
     # repeat(("hock", "ESL-Hockolicious.Challenge.Gbx", "ESL-Hockolicious_0.5m_cl2.npy", False, False), 1),
-    # repeat(("A01", f'"Official Maps\A01-Race.Challenge.Gbx"', f"A01-Race_0.5m_cl2.npy", True, True), 4),
-    # repeat(("A01", f'"Official Maps\A01-Race.Challenge.Gbx"', f"A01-Race_0.5m_cl2.npy", False, True), 1),
+    repeat(("A01", f'"A01-Race.Challenge.Gbx"',
+           f"A01-Race_0.5m_chappie.npy", True, True), 4),
+    repeat(("A01", f'"A01-Race.Challenge.Gbx"',
+           f"A01-Race_0.5m_chappie.npy", False, True), 1),
     # repeat(("A02", f'"Official Maps\A02-Race.Challenge.Gbx"', f"A02-Race_0.5m_alyen.npy", True, True), 4),
     # repeat(("A02", f'"Official Maps\A02-Race.Challenge.Gbx"', f"A02-Race_0.5m_alyen.npy", False, True), 1),
     # repeat(("A01", f'"Official Maps\A01-Race.Challenge.Gbx"', f"A01-Race_0.5m_rollin.npy", True, True), 4),
