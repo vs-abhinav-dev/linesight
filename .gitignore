@@ -14,6 +14,7 @@
 /misc_crap
 /maps/*
 !/maps/map5_0.5m_cl.npy
+!/maps/A01-Race_0.5m_chappie.npy
 /trackmania_rl/dxcam
 *.txt
 !requirements_conda.txt

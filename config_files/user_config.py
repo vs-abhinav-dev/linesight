@@ -9,9 +9,10 @@ from sys import platform
 
 is_linux = platform in ["linux", "linux2"]
 
-username = "name_to_be_changed"  # Username of the TMNF account
+username = "anya"  # Username of the TMNF account
 
-run_name = "run_name_to_be_changed"
+run_name = "A01-Race-anya"
+
 
 # Path where Python_Link.as should be placed so that it can be loaded in TMInterface.
 # Usually Path(os.path.expanduser("~")) / "Documents" / "TMInterface" / "Plugins" / "Python_Link.as"
@@ -28,7 +29,7 @@ trackmania_base_path = Path(os.path.expanduser("~")) / \
 base_tmi_port = 8478
 
 # If on Linux, path of a shell script that launches the game, with the TMInterface port as first argument
-linux_launch_game_path = "/home/MrShah_21/programming/linesight/scripts/launch_game_pb.sh"
+linux_launch_game_path = "[path-to-project]/linesight/scripts/launch_game_pb.sh"
 
 # If on windows, path where TMLoader can be found.
 # Usually Path(os.path.expanduser("~") / "AppData" / "Local" / "TMLoader" / "TMLoader.exe"
