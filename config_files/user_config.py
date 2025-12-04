@@ -29,7 +29,7 @@ trackmania_base_path = Path(os.path.expanduser("~")) / \
 base_tmi_port = 8478
 
 # If on Linux, path of a shell script that launches the game, with the TMInterface port as first argument
-linux_launch_game_path = "~/[path_to_project]/linesight/scripts/launch_game_pb.sh"
+linux_launch_game_path = "[path-to-project]/linesight/scripts/launch_game_pb.sh"
 
 # If on windows, path where TMLoader can be found.
 # Usually Path(os.path.expanduser("~") / "AppData" / "Local" / "TMLoader" / "TMLoader.exe"
